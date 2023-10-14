@@ -8,17 +8,14 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics import pairwise_distances
 from geopy.distance import geodesic
-from gensim.models import Word2Vec
 
-import time
 
-def run_argoritm(location, salary, career, education, work_type, skills):
+def  mini_jobsulting(company_id, skills, jobtype, education, location, career, salary):
 
     pymysql.install_as_MySQLdb()
     import MySQLdb
 
     engine = create_engine("mysql+mysqldb://root:" + "dmlwls123" + "@localhost/Saramin", connect_args={'charset': 'utf8mb4'})
-    
     conn = engine.connect()
     df = pd.read_sql('SELECT * FROM jobsearch', engine)
 
@@ -157,16 +154,6 @@ def run_argoritm(location, salary, career, education, work_type, skills):
 
     # 'experiencelevel_code' 열을 숫자로 변환
     df_read['read_cnt'] = df_read['read_cnt'].astype(int)
-
-    # 키워드 전처리 -----------------------------------------------------------------------------------------------
-    df_keyword = df[['id', 'keyword']].copy()
-    df_keyword = df_keyword.dropna(subset=['keyword'])
-    df_keyword['keyword'] = df_keyword['keyword'].str.split(',')
-
-    # 제목 전처리 -----------------------------------------------------------------------------------------------
-    df_title = df[['id', 'title']].copy()
-    df_title = df_title.dropna(subset=['title'])
-
     # -----------------------------------------------------------------------------------------------
     # 구인 공고 데이터 전처리화
     company_data = pd.DataFrame({'id': df_merged['id'].unique().tolist(),
@@ -211,16 +198,6 @@ def run_argoritm(location, salary, career, education, work_type, skills):
     company_data = company_data.dropna(subset=['read_cnt'])
     company_data = company_data.reset_index(drop=True)
 
-    # company_data에 keyword 열 추가
-    company_data = company_data.merge(df_keyword, on='id', how='left')
-    company_data = company_data.dropna(subset=['keyword'])
-    company_data = company_data.reset_index(drop=True)
-
-    # company_data에 title 열 추가
-    company_data = company_data.merge(df_title, on='id', how='left')
-    company_data = company_data.dropna(subset=['title'])
-    company_data = company_data.reset_index(drop=True)
-
     # ',' 쉼표 삭제
     company_data['salary_name'] = company_data['salary_name'].str.replace(',', '')
 
@@ -244,236 +221,173 @@ def run_argoritm(location, salary, career, education, work_type, skills):
     company_data.loc[~company_data['salary_name'].isin(['면접후 결정', '회사내규에 따름']), 'salary_name'] = \
         company_data.loc[~company_data['salary_name'].isin(['면접후 결정', '회사내규에 따름']), 'salary_name'].apply(pd.to_numeric, errors='coerce')
 
-    company_data = company_data.assign(skill_score=0.0, jobtype_score=0.0, education_score=0.0, salary_score=0.0, experience_score=0.0, location_score=0.0, total=0.0,
-                                    skill_star=0, jobtype_star=0, education_star=0, salary_star=0, experience_star=0, location_star=0)
-
-    # 기술스택 입력 및 유사도 계산 후 점수화  -----------------------------------------------------------------------------------------------
+    # 사용자 데이터 입력 -----------------------------------------------------------------------------------------------
+    # 사용자 입력 및 데이터 전처리
     # user_skills = input("사용자가 보유한 기술 스택을 입력하세요 (여러 개일 경우 쉼표로 구분): ")
-    
-    start_time = time.perf_counter()
-    
     user_skills = ','.join(skills)
-    print(user_skills)
     user_skills = user_skills.split(',')
     user_skills = [stack.strip() for stack in user_skills]
 
-    # 벡터화
-    mlb = MultiLabelBinarizer()
-    company_skills_encoded = mlb.fit_transform(company_data['Skills'])
-    user_skills_encoded = mlb.transform([user_skills])
-
-    # 유사도 측정 (기술스택)
-    similarity_scores = cosine_similarity(user_skills_encoded, company_skills_encoded)
-
-    # 점수 계산
-    max_score = similarity_scores.max()
-    min_score = similarity_scores.min()
-
-    normalized_scores = (similarity_scores - min_score) / (max_score - min_score)
-
-    # skill_score 열에 저장
-    company_data['skill_score'] = normalized_scores.flatten()
-    
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
-
-    print(f"스택 코드 실행 시간: {elapsed_time:.10f} 초")
-
-    # 직무유형 입력 및 유사도 계산 후 점수화  -----------------------------------------------------------------------------------------------
     # user_jobtypes = input("사용자의 직무 유형을 입력하세요 (여러 개일 경우 쉼표로 구분): ")
-    
-    start_time = time.perf_counter()
-    
-    user_jobtypes = work_type
+    user_jobtypes = jobtype
     user_jobtypes = user_jobtypes.split(',')
     user_jobtypes = [jobtype.strip() for jobtype in user_jobtypes]
 
-    company_jobtypes_encoded = mlb.fit_transform(company_data['type'])
-    user_jobtypes_encoded = mlb.transform([user_jobtypes])
+    # user_educationlevel = input("사용자의 학력을 입력하세요: ")
+    user_educationlevel = education
 
-    # 유사도 측정 (직무유형)
-    similarity_scores = cosine_similarity(user_jobtypes_encoded, company_jobtypes_encoded)
-
-    # 점수 계산
-    max_score = similarity_scores.max()
-    min_score = similarity_scores.min()
-
-    normalized_scores = (similarity_scores - min_score) / (max_score - min_score)
-
-    # skill_score 열에 저장
-    company_data['jobtype_score'] = normalized_scores.flatten()
-    
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
-
-    print(f"직무유형 코드 실행 시간: {elapsed_time:.10f} 초")
-
-    # 학력 입력 및 유사도 계산 후 점수화 -----------------------------------------------------------------------------------------------
-    # user_education = input("사용자의 학력을 입력하세요: ")
-    
-    start_time = time.perf_counter()
-    
-    user_education = education
-
-    # 학력에 따른 점수 설정
-    if user_education == "고등학교졸업":
-        education_score = {
-            '고등학교졸업': 1,
-            '대학졸업(2,3년)': 0,
-            '대학교졸업(4년)': 0,
-            '석사졸업': 0,
-            '박사졸업': 0,
-            '학력무관': 1
-        }
-    elif user_education == "대학졸업(2,3년)":
-        education_score = {
-            '고등학교졸업': 0.5,
-            '대학졸업(2,3년)': 1,
-            '대학교졸업(4년)': 0,
-            '석사졸업': 0,
-            '박사졸업': 0,
-            '학력무관': 0.75
-        }
-    elif user_education == "대학교졸업(4년)":
-        education_score = {
-            '고등학교졸업': 0.33,
-            '대학졸업(2,3년)': 0.67,
-            '대학교졸업(4년)': 1,
-            '석사졸업': 0,
-            '박사졸업': 0,
-            '학력무관': 0.67
-        }
-    elif user_education == "석사졸업":
-        education_score = {
-            '고등학교졸업': 0.25,
-            '대학졸업(2,3년)': 0.5,
-            '대학교졸업(4년)': 0.75,
-            '석사졸업': 1,
-            '박사졸업': 0,
-            '학력무관': 0.63
-        }
-    elif user_education == "박사졸업":
-        education_score = {
-            '고등학교졸업': 0.2,
-            '대학졸업(2,3년)': 0.4,
-            '대학교졸업(4년)': 0.6,
-            '석사졸업': 0.8,
-            '박사졸업': 1,
-            '학력무관': 0.5
-        }
-    elif user_education == "미응답":
-        education_score = {
-            '고등학교졸업': 1,
-            '대학졸업(2,3년)': 1,
-            '대학교졸업(4년)': 1,
-            '석사졸업': 1,
-            '박사졸업': 1,
-            '학력무관': 1
-        }
-
-    # company_data에 학력 점수 계산하여 추가
-    company_data['education_score'] = company_data['educationlevel_name'].map(education_score)
-
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
-
-    print(f"학력 코드 실행 시간: {elapsed_time:.10f} 초")
-    # 급여(연봉) 입력 및 유사도 계산 후 점수화 -----------------------------------------------------------------------------------------------
     # user_salary = int(input("사용자의 희망 연봉을 입력하세요: "))
-    
-    start_time = time.perf_counter()
-    
     user_salary = int(salary)
 
-    # '회사내규에 따름'과 '면접후 결정'을 1로 저장
-    company_data.loc[company_data['salary_name'].isin(['회사내규에 따름', '면접후 결정']), 'salary_score'] = 1
-
-    # 숫자로 된 연봉에 대해 정규화된 점수화 계산
-    numeric_salaries = pd.to_numeric(company_data['salary_name'], errors='coerce')
-    max_salary = numeric_salaries.max()
-    min_salary = numeric_salaries.min()
-    normalized_salaries = (numeric_salaries - min_salary) / (max_salary - min_salary)
-
-    # 사용자가 입력한 연봉을 기준으로 정규화된 점수 계산
-    user_normalized_salary = (user_salary - min_salary) / (max_salary - min_salary)
-
-    # 점수화된 유사도 계산
-    score = np.where(numeric_salaries > user_salary, 1 + (user_normalized_salary - normalized_salaries), 1 - (user_normalized_salary - normalized_salaries))
-
-    # score의 길이를 company_data의 길이와 동일하게 맞춤
-    score = pd.Series(score, index=company_data.index)
-
-    # 최종 점수를 company_data['salary_score'] 열에 저장
-    company_data.loc[~company_data['salary_name'].isin(['회사내규에 따름', '면접후 결정']), 'salary_score'] = score
-
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
-
-    print(f"연봉 코드 실행 시간: {elapsed_time:.10f} 초")
-
-    # 급여(연봉) 입력 및 유사도 계산 후 점수화 -----------------------------------------------------------------------
-    # 사용자의 경력 년수를 입력 받습니다.
     # years_of_experience = int(input("경력 년수를 입력하세요 (경력이 없을 경우 0 입력): "))
-    
-    start_time = time.perf_counter()
-    
     years_of_experience = int(career)
 
-    # 경력에 따른 점수를 계산하는 함수를 정의합니다.
-    def calculate_score(experience_level, min_experience, max_experience, years_of_experience):
-        if experience_level == 0:  # 경력무관
-            return 1.0
-        elif experience_level == 1:  # 신입
-            if years_of_experience == 0:  # 사용자의 경력이 없는 경우
-                return 0.0
-            elif years_of_experience <= max_experience:
-                return 1.0 - (max_experience - years_of_experience) / max_experience
-            else:
-                return 0.0
-        elif experience_level == 2:  # 경력
-            if years_of_experience < min_experience or years_of_experience > max_experience:
-                return 0.0
-            elif years_of_experience == min_experience or years_of_experience == max_experience:
-                return 0.5
-            else:
-                return 0.5 + (years_of_experience - min_experience) / (max_experience - min_experience)
-        elif experience_level == 3:  # 신입/경력
-            if years_of_experience <= max_experience:
-                return 1.0 - (max_experience - years_of_experience) / max_experience
-            else:
-                return 0.0
-        else:
-            return 0.0
-
-    # 기업 데이터를 순회하며 점수를 계산
-    for index, row in company_data.iterrows():
-        experience_level = row['experiencelevel_code']
-        min_experience = row['experiencelevel_min']
-        max_experience = row['experiencelevel_max']
-
-        # 점수를 계산
-        if years_of_experience < min_experience:
-            score = 0.0
-        elif max_experience == 0:
-            score = 1.0
-        else:
-            score = calculate_score(experience_level, min_experience, max_experience, years_of_experience)
-
-        # 계산된 점수를 할당합니다.
-        company_data.at[index, 'experience_score'] = score
-        
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
-
-    print(f"경력 코드 실행 시간: {elapsed_time:.10f} 초")
-
-    # 지역 입력 및 유사도 계산 후 점수화 -----------------------------------------------------------------------
     # user_location = input("거주하는 지역을 입력하세요: ")
-    
-    start_time = time.perf_counter()
-    
     user_location = location
 
+    # user_company_id = int(input("검색하고자 하는 기업의 ID를 입력하세요: "))
+    user_company_id = company_id
+
+    # company_data에서 기업 정보 찾기
+    found_company = company_data.loc[company_data['id'] == user_company_id]
+
+    # 기술 스택 조회 -----------------------------------------------------------------------------------------------
+    # 찾은 기업 정보 출력
+    
+    if not found_company.empty:
+        print("기업 정보:")
+        print("ID:", found_company['id'].iloc[0])
+        print("Company:", found_company['Company'].iloc[0])
+        print("Skills:", found_company['Skills'].iloc[0])
+    else:
+        print("해당 ID의 기업 정보를 찾을 수 없습니다.")
+
+    # 사용자가 가지고 있지 않은 기술 스택 찾기
+    missing_skills = [skill for skill in found_company['Skills'].iloc[0] if skill not in user_skills]
+
+
+    # 기술 스택 비교 결과 출력
+    skills_result = ""
+    if missing_skills:
+        skills_str = " ".join(missing_skills)
+        skills_result = f"사용자가 가지고 있지 않은 기술 스택: {skills_str}"
+    else:
+        skills_result = "해당 기업에서 요구하는 기술 스택을 모두 보유 중입니다."
+
+
+    # 직무 유형 조회 -----------------------------------------------------------------------------------------------
+    # 기업별로 직무 유형 확인
+    jobtype_result = ""
+    for index, row in company_data.iterrows():
+        if row['id'] == user_company_id:
+            company_types = row['type']
+            match_found = False
+            for jobtype in user_jobtypes:
+                if any(jobtype.lower() in job.lower() for job in company_types):
+                    match_found = True
+                    break
+            if match_found:
+                jobtype_result = "직무 유형을 만족합니다."
+            else:
+                jobtype_result = f"직무 유형을 만족하지 않습니다. {company_types}"
+            break
+    else:
+        jobtype_result = "해당 기업 ID에 대한 정보를 찾을 수 없습니다."
+
+
+    # 학력 조회 -----------------------------------------------------------------------------------------------
+    # 학력 순위 지정
+    education_ranks = {
+        '고등학교졸업': 0,
+        '대학졸업(2,3년)': 1,
+        '대학교졸업(4년)': 2,
+        '석사졸업': 3,
+        '박사졸업': 4,
+    }
+
+    # 기업별로 학력 요구사항 확인
+    education_result = ""
+    for index, row in company_data.iterrows():
+        if row['id'] == user_company_id:
+            company_education = row['educationlevel_name']
+            user_rank = education_ranks.get(user_educationlevel, -1)
+            company_rank = education_ranks.get(company_education, -1)
+
+            if company_rank == -1:  # 학력 무관 요구
+                education_result = "기업에서 요구하는 학력을 만족합니다."
+            elif user_rank >= 0 and company_rank >= 0:
+                if user_rank >= company_rank:
+                    education_result = "기업에서 요구하는 학력을 만족합니다."
+                else:
+                    education_result = f"기업에서 요구하는 학력을 만족하지 않습니다. {company_education}"
+            else:
+                education_result = f"기업에서 요구하는 학력을 만족하지 않습니다. {company_education}"
+            break
+    else:
+        education_result = "해당 기업 ID에 대한 정보를 찾을 수 없습니다."
+
+
+    # 연봉 조회 -----------------------------------------------------------------------------------------------
+    # 기업별로 연봉 요구사항 확인
+    salary_result = ""
+    for index, row in company_data.iterrows():
+        if row['id'] == user_company_id:
+            company_salary = row['salary_name']
+            if isinstance(company_salary, str):
+                salary_result = company_salary
+            elif isinstance(company_salary, int):
+                if user_salary <= company_salary:
+                    salary_result = "사용자가 원하는 연봉을 만족합니다."
+                else:
+                    salary_diff = user_salary - company_salary
+                    salary_result = str(salary_diff)
+            break
+        else:
+            salary_result = "해당 기업 ID에 대한 정보를 찾을 수 없습니다."
+ 
+
+    # 경력 조회 -----------------------------------------------------------------------------------------------
+    # 해당 ID를 만족하는 기업들의 정보 찾기
+    matching_companies = company_data[company_data['id'] == user_company_id]
+
+    career_result = ""
+    if not matching_companies.empty:
+        for _, row in matching_companies.iterrows():
+            experience_level_code = row['experiencelevel_code']
+            experience_level_min = row['experiencelevel_min']
+            experience_level_max = row['experiencelevel_max']
+
+            if years_of_experience == 0 and experience_level_code in [0, 1]:  # 신입, 경력무관 요구
+                career_result = "충분한 경력입니다."
+
+            elif years_of_experience == 0 and experience_level_code in [2, 3]:  # 경력, 신입/경력 요구
+                if years_of_experience >= experience_level_min:
+                    career_result = "충분한 경력입니다."
+                else:
+                    experience_gap = experience_level_min - years_of_experience
+                    career_result = f"경력이 {experience_gap}년 부족합니다."
+
+                if experience_level_max != 0 and years_of_experience > experience_level_max:
+                    experience_excess = years_of_experience - experience_level_max
+                    career_result += f" 경력이 {experience_excess}년 초과하였습니다."
+
+            elif years_of_experience != 0 and experience_level_code in [1, 2, 3, 0]:  # 경력 요구
+                if years_of_experience >= experience_level_min:
+                    career_result = "충분한 경력입니다."
+                else:
+                    experience_gap = experience_level_min - years_of_experience
+                    career_result = f"경력이 {experience_gap}년 부족합니다."
+
+                if experience_level_max != 0 and years_of_experience > experience_level_max:
+                    experience_excess = years_of_experience - experience_level_max
+                    career_result += f" 경력이 {experience_excess}년 초과하였습니다."
+            else:
+                career_result = "유효하지 않은 경력 요구 코드입니다."
+    else:
+        career_result = "해당 ID를 만족하는 회사 정보를 찾을 수 없습니다."
+
+
+    # 지역 조회 -----------------------------------------------------------------------------------------------
     # 지역별 위도, 경도 값 설정
     location_coordinates = pd.DataFrame({
         'location_name': ['서울 서울전체', '서울 강남구', '서울 강동구', '서울 강북구', '서울 강서구', '서울 관악구', '서울 광진구', '서울 구로구', '서울 금천구', '서울 노원구',
@@ -565,175 +479,52 @@ def run_argoritm(location, salary, career, education, work_type, skills):
                     126.5653, 126.5219]
         })
 
-    # 사용자가 입력한 지역의 위도와 경도 찾기
-    user_coordinates = location_coordinates[location_coordinates['location_name'] == user_location]
-    user_latitude = user_coordinates['latitude'].iloc[0]
-    user_longitude = user_coordinates['longitude'].iloc[0]
-
-    # 기업별 위치와의 거리 계산
-    distances = []
-
+    location_result = ""
     for index, row in company_data.iterrows():
-        locations = row['location_name']
-        min_distance = float('inf')
-        for location in locations:
-            location_coordinates_single = location_coordinates[location_coordinates['location_name'] == location]
-            if not location_coordinates_single.empty:
-                latitude = location_coordinates_single['latitude'].iloc[0]
-                longitude = location_coordinates_single['longitude'].iloc[0]
-                distance = geodesic((latitude, longitude), (user_latitude, user_longitude)).km
-                if distance < min_distance:
-                    min_distance = distance
-        distances.append(min_distance)
+        if row['id'] == user_company_id:
+            company_locations = row['location_name']
 
-    # 가장 가까운 기업과 가장 먼 기업의 거리 계산
-    min_distance = min(distances)
-    max_distance = max(distances)
+            user_location_coordinates = location_coordinates.loc[location_coordinates['location_name'] == user_location]
 
-    # 점수 계산
-    company_data['location_distance'] = distances
-    company_data['location_score'] = company_data.apply(lambda row: 0.3 + (1 - (row['location_distance'] - min_distance) / (max_distance - min_distance)) * 0.7, axis=1)
+            distances = []  # 각 기업과 사용자 위치 사이의 거리를 저장할 리스트
+
+            if isinstance(company_locations, str):
+                company_locations = [company_locations]  # 문자열인 경우 리스트로 변환
+
+            for location in company_locations:
+                location = location.strip()  # 공백 제거
+                company_coordinates = location_coordinates.loc[location_coordinates['location_name'] == location]
+
+                if not user_location_coordinates.empty and not company_coordinates.empty:
+                    user_latitude = user_location_coordinates['latitude'].values[0]
+                    user_longitude = user_location_coordinates['longitude'].values[0]
+                    company_latitude = company_coordinates['latitude'].values[0]
+                    company_longitude = company_coordinates['longitude'].values[0]
+                    company_coordinates = (company_latitude, company_longitude)
+                    user_coordinates = (user_latitude, user_longitude)
+                    distance = geodesic(user_coordinates, company_coordinates).km
+                    distances.append(distance)
+
+            if distances:
+                min_distance = min(distances)
+                location_result = f"가장 가까운 기업과의 거리: {min_distance}km"
+            else:
+                location_result = "사용자 또는 기업의 위치 정보를 찾을 수 없습니다."
+
+            break
+        
+    import json
     
+    response = {
+        'skills_result' : skills_result,
+        'jobtype_result': jobtype_result,
+        'education_result': education_result,
+        'salary_result': salary_result,
+        'career_result': career_result,
+        'location_result': location_result,
+         }
     
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
+    return response
 
-    print(f"지역 코드 실행 시간: {elapsed_time:.10f} 초")
-
-    # 최종 계산 -----------------------------------------------------------------------------------------------
-    # skill_score, jobtype_score, education_score, salary_score, experience_score, location_score를 곱한 값 계산
-    company_data['total'] = 100 * company_data['skill_score'] * company_data['jobtype_score'] * company_data['education_score'] * company_data['salary_score'] * company_data['experience_score'] * company_data['location_score']
-
-    # total 열을 기준으로 내림차순 정렬하여 데이터프레임 재정렬
-    company_data = company_data.sort_values('total', ascending=False)
-
-    start_time = time.perf_counter()
-
-    # 상위 특정 개수의 행 선택
-    num_rows = 3
-    target_rows = company_data.head(num_rows)
-
-    # 조건에 따라 skill_star 값 할당
-    for index, row in target_rows.iterrows():
-        skill_score = row['skill_score']
-        if 0.0 <= skill_score < 0.2:
-            company_data.at[index, 'skill_star'] = 1
-        elif 0.2 <= skill_score < 0.4:
-            company_data.at[index, 'skill_star'] = 2
-        elif 0.4 <= skill_score < 0.6:
-            company_data.at[index, 'skill_star'] = 3
-        elif 0.6 <= skill_score < 0.8:
-            company_data.at[index, 'skill_star'] = 4
-        elif skill_score >= 0.8:
-            company_data.at[index, 'skill_star'] = 5
-
-    # 조건에 따라 jobtype_star 값 할당
-    for index, row in target_rows.iterrows():
-        jobtype_score = row['jobtype_score']
-        if 0.0 <= jobtype_score < 0.2:
-            company_data.at[index, 'jobtype_star'] = 1
-        elif 0.2 <= jobtype_score < 0.4:
-            company_data.at[index, 'jobtype_star'] = 2
-        elif 0.4 <= jobtype_score < 0.6:
-            company_data.at[index, 'jobtype_star'] = 3
-        elif 0.6 <= jobtype_score < 0.8:
-            company_data.at[index, 'jobtype_star'] = 4
-        elif jobtype_score >= 0.8:
-            company_data.at[index, 'jobtype_star'] = 5
-
-    # 조건에 따라 education_star 값 할당
-    for index, row in target_rows.iterrows():
-        education_score = row['education_score']
-        if 0.0 <= education_score < 0.2:
-            company_data.at[index, 'education_star'] = 1
-        elif 0.2 <= education_score < 0.4:
-            company_data.at[index, 'education_star'] = 2
-        elif 0.4 <= education_score < 0.6:
-            company_data.at[index, 'education_star'] = 3
-        elif 0.6 <= education_score < 0.8:
-            company_data.at[index, 'education_star'] = 4
-        elif education_score >= 0.8:
-            company_data.at[index, 'education_star'] = 5
-
-    # 조건에 따라 salary_star 값 할당
-    for index, row in target_rows.iterrows():
-        salary_score = row['salary_score']
-        if 0.0 <= salary_score < 0.2:
-            company_data.at[index, 'salary_star'] = 1
-        elif 0.2 <= salary_score < 0.4:
-            company_data.at[index, 'salary_star'] = 2
-        elif 0.4 <= salary_score < 0.6:
-            company_data.at[index, 'salary_star'] = 3
-        elif 0.6 <= salary_score < 0.8:
-            company_data.at[index, 'salary_star'] = 4
-        elif salary_score >= 0.8:
-            company_data.at[index, 'salary_star'] = 5
-
-    # 조건에 따라 experience_star 값 할당
-    for index, row in target_rows.iterrows():
-        experience_score = row['experience_score']
-        if 0.0 <= experience_score < 0.2:
-            company_data.at[index, 'experience_star'] = 1
-        elif 0.2 <= experience_score < 0.4:
-            company_data.at[index, 'experience_star'] = 2
-        elif 0.4 <= experience_score < 0.6:
-            company_data.at[index, 'experience_star'] = 3
-        elif 0.6 <= experience_score < 0.8:
-            company_data.at[index, 'experience_star'] = 4
-        elif experience_score >= 0.8:
-            company_data.at[index, 'experience_star'] = 5
-
-    # 조건에 따라 location_star 값 할당
-    for index, row in target_rows.iterrows():
-        location_score = row['location_score']
-        if 0.0 <= location_score < 0.2:
-            company_data.at[index, 'location_star'] = 1
-        elif 0.2 <= location_score < 0.4:
-            company_data.at[index, 'location_star'] = 2
-        elif 0.4 <= location_score < 0.6:
-            company_data.at[index, 'location_star'] = 3
-        elif 0.6 <= location_score < 0.8:
-            company_data.at[index, 'location_star'] = 4
-        elif location_score >= 0.8:
-            company_data.at[index, 'location_star'] = 5
-            
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
-
-    print(f"별 코드 실행 시간: {elapsed_time:.10f} 초")
-
-    company_data.to_excel("test1.xlsx")
-
-    # 대표 키워드 추출 -----------------------------------------------------------------------------------------------
-    
-    start_time = time.perf_counter()
-    
-    top_keywords = company_data['keyword'].head(15).tolist()
-    keywords = [item for sublist in top_keywords for item in sublist]
-    keywords = [''.join(keyword.split()) for keyword in keywords]
-
-    # Word2Vec 모델 학습
-    sentences = [kw.split() for kw in keywords]
-    model = Word2Vec(sentences, min_count=1)
-
-    # 대표 키워드 추출
-    representative_keyword = None
-    max_similarity = -1
-
-    # 각 키워드와 다른 키워드들 간의 유사도 계산
-    for keyword in keywords:
-        similarity = sum(cosine_similarity([model.wv[keyword]], [model.wv[kw]])[0][0] for kw in keywords)
-
-        if similarity > max_similarity:
-            max_similarity = similarity
-            representative_keyword = keyword
-
-            
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
-
-    print(f"키워드 코드 실행 시간: {elapsed_time:.10f} 초")
-
-    # print("대표 키워드:", representative_keyword)
-    
-    return (representative_keyword, company_data.iloc[[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], 0], company_data.iloc[[0,1,2], [21,22,23,24,25]])
+    # else:
+    #     print("해당 기업 ID에 대한 정보를 찾을 수 없습니다.")

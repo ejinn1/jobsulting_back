@@ -58,5 +58,81 @@ class KakaoLogInView(APIView):
         except Exception as e:
             return Response(status=status.HTTP_400_BAD_REQUEST, data={'message': f'An unknown error occurred: {str(e)}'})
 
+import json
+from django.http import JsonResponse, HttpResponseBadRequest
+from django.views import View
+from accounts.models import User
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+
+from rest_framework import serializers
+from .models import UserProfile, Skill
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UpdateOrCreateUserProfileView(View):
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            email = data.get('email')
+            user = User.objects.get(email=email)
+
+            # Try to get existing profile or create a new one
+            profile, created = UserProfile.objects.get_or_create(author=user)
+
+            profile.location = data.get('location', profile.location)
+            profile.salary = data.get('salary', profile.salary)
+            profile.career = data.get('career', profile.career)
+            profile.education = data.get('education', profile.education)
+            profile.work_type = data.get('work_type', profile.work_type)
+
+            # handle skills
+            skill_data = data.get('skills', [])
+            if isinstance(skill_data, list):
+                skills = [Skill.objects.get_or_create(skill_name=skill)[0] for skill in skill_data]
+                profile.skills.clear()
+                profile.skills.set(skills)
+            else:
+                return JsonResponse({'error': 'Invalid skill data provided, please provide a list of skills'},
+                                    status=400)
+            # skills = [Skill.objects.get_or_create(skill_name=skill)[0] for skill in skill_data]
+            # profile.skills.clear()
+            # profile.skills.set(skills)
+
+            profile.save()
+
+            if created:
+                return JsonResponse("Profile Created", safe=False, status=201)
+            else:
+                return JsonResponse("Profile Updated", safe=False, status=200)
+
+        except KeyError as e:
+            return HttpResponseBadRequest(f"Field '{str(e)}' is missing in the payload")
+        except User.DoesNotExist:
+            return JsonResponse({'error': 'User not found'}, status=404)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
+class UserProfileView(View):
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            email = data.get('email')
+            profile = UserProfile.objects.get(author__email=email)
+
+            # Serialize profile data as needed
+            serialized_profile = {
+                'location': profile.location,
+                'salary': profile.salary,
+                'career': profile.career,
+                'education': profile.education,
+                'work_type': profile.work_type,
+                # Include other fields as needed
+                 'skills': list(profile.skills.values_list('skill_name', flat=True))
+            }
+
+            return JsonResponse(serialized_profile, safe=False)
+
+        except KeyError as e:
+            return JsonResponse({'error': f"Field '{str(e)}' is missing in the payload"}, status=400)
+        except UserProfile.DoesNotExist:
+            return JsonResponse({'error': 'User profile not found'}, status=404)

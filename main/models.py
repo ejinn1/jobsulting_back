@@ -57,6 +57,8 @@ class Jobsearch(models.Model):
     url = models.TextField(blank=True, null=True)
     active = models.BigIntegerField(blank=True, null=True)
     keyword = models.TextField(blank=True, null=True)
+    read_cnt = models.TextField(blank=True, null=True)
+    # apply-cnt = models.TextField(blank=True, null=True)
     company_detail_href = models.TextField(blank=True, null=True)
     company_detail_name = models.TextField(blank=True, null=True)
     title = models.TextField(blank=True, null=True)
